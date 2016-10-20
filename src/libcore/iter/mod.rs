@@ -399,6 +399,12 @@ impl<'a, I, T: 'a> Iterator for Cloned<I>
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.it.size_hint()
     }
+
+    fn fold<Acc, F>(self, init: Acc, mut f: F) -> Acc
+        where F: FnMut(Acc, Self::Item) -> Acc,
+    {
+        self.it.fold(init, move |acc, elt| f(acc, elt.clone()))
+    }
 }
 
 #[stable(feature = "iter_cloned", since = "1.1.0")]
@@ -542,6 +548,25 @@ impl<A, B> Iterator for Chain<A, B> where
             ChainState::Front => self.a.count(),
             ChainState::Back => self.b.count(),
         }
+    }
+
+    fn fold<Acc, F>(self, init: Acc, mut f: F) -> Acc
+        where F: FnMut(Acc, Self::Item) -> Acc,
+    {
+        let mut accum = init;
+        match self.state {
+            ChainState::Both | ChainState::Front => {
+                accum = self.a.fold(accum, &mut f);
+            }
+            _ => { }
+        }
+        match self.state {
+            ChainState::Both | ChainState::Back => {
+                accum = self.b.fold(accum, &mut f);
+            }
+            _ => { }
+        }
+        accum
     }
 
     #[inline]
@@ -938,6 +963,13 @@ impl<B, I: Iterator, F> Iterator for Map<I, F> where F: FnMut(I::Item) -> B {
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.iter.size_hint()
+    }
+
+    fn fold<Acc, G>(self, init: Acc, mut g: G) -> Acc
+        where G: FnMut(Acc, Self::Item) -> Acc,
+    {
+        let mut f = self.f;
+        self.iter.fold(init, move |acc, elt| g(acc, f(elt)))
     }
 }
 
@@ -1686,6 +1718,22 @@ impl<I: Iterator, U: IntoIterator, F> Iterator for FlatMap<I, U, F>
                 next => self.frontiter = next.map(IntoIterator::into_iter),
             }
         }
+    }
+
+    fn fold<Acc, G>(self, init: Acc, mut f: G) -> Acc
+        where G: FnMut(Acc, Self::Item) -> Acc,
+    {
+        let mut accum = init;
+        if let Some(iter) = self.frontiter {
+            accum = iter.fold(accum, &mut f);
+        }
+        for iter in self.iter.map(self.f) {
+            accum = iter.into_iter().fold(accum, &mut f);
+        }
+        if let Some(iter) = self.backiter {
+            accum = iter.fold(accum, &mut f);
+        }
+        accum
     }
 
     #[inline]
