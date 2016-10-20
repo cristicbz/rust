@@ -985,6 +985,29 @@ fn test_empty() {
     assert_eq!(it.next(), None);
 }
 
+#[test]
+fn test_chain_fold() {
+    let xs = [1, 2, 3];
+    let ys = [1, 2, 0];
+
+    let mut iter = xs.iter().chain(&ys);
+    iter.next();
+    let mut result = Vec::new();
+    iter.fold((), |(), &elt| result.push(elt));
+    assert_eq!(&[2, 3, 1, 2, 0], &result[..]);
+}
+
+#[test]
+fn test_flat_map_fold() {
+    let xs = [1, 2, 3, 4, 5, 6];
+
+    let mut iter = xs.chunks(2).flat_map(|x| x);
+    iter.next();
+    let mut result = Vec::new();
+    iter.fold((), |(), &elt| result.push(elt));
+    assert_eq!(&xs[1..], &result[..]);
+}
+
 #[bench]
 fn bench_rposition(b: &mut Bencher) {
     let it: Vec<usize> = (0..300).collect();
