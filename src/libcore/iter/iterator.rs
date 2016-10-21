@@ -190,9 +190,7 @@ pub trait Iterator {
     #[inline]
     #[stable(feature = "rust1", since = "1.0.0")]
     fn last(self) -> Option<Self::Item> where Self: Sized {
-        let mut last = None;
-        for x in self { last = Some(x); }
-        last
+        self.fold(None, |_, x| Some(x))
     }
 
     /// Consumes the `n` first elements of the iterator, then returns the
@@ -1228,13 +1226,14 @@ pub trait Iterator {
         let mut left: B = Default::default();
         let mut right: B = Default::default();
 
-        for x in self {
+        // Use fold to enable iterator-specific implementations.
+        self.fold((), |_, x| {
             if f(&x) {
-                left.extend(Some(x))
+                left.extend(Some(x));
             } else {
-                right.extend(Some(x))
+                right.extend(Some(x));
             }
-        }
+        });
 
         (left, right)
     }
@@ -1794,10 +1793,10 @@ pub trait Iterator {
         let mut ts: FromA = Default::default();
         let mut us: FromB = Default::default();
 
-        for (t, u) in self {
+        self.fold((), |_, (t, u)| {
             ts.extend(Some(t));
             us.extend(Some(u));
-        }
+        });
 
         (ts, us)
     }
@@ -2116,7 +2115,7 @@ pub trait Iterator {
 /// commonalities of {max,min}{,_by}. In particular, this avoids
 /// having to implement optimizations several times.
 #[inline]
-fn select_fold1<I,B, FProj, FCmp>(mut it: I,
+fn select_fold1<I,B, FProj, FCmp>(it: I,
                                   mut f_proj: FProj,
                                   mut f_cmp: FCmp) -> Option<(B, I::Item)>
     where I: Iterator,
@@ -2126,17 +2125,15 @@ fn select_fold1<I,B, FProj, FCmp>(mut it: I,
     // start with the first element as our selection. This avoids
     // having to use `Option`s inside the loop, translating to a
     // sizeable performance gain (6x in one case).
-    it.next().map(|mut sel| {
-        let mut sel_p = f_proj(&sel);
-
-        for x in it {
-            let x_p = f_proj(&x);
-            if f_cmp(&sel_p,  &sel, &x_p, &x) {
-                sel = x;
-                sel_p = x_p;
+    let mut projected = it.map(|x| (f_proj(&x), x));
+    projected.next().map(|(sel_p, sel)| {
+        projected.fold((sel_p, sel), |(sel_p, sel), (x_p, x)| {
+            if f_cmp(&sel_p, &sel, &x_p, &x) {
+                (x_p, x)
+            } else {
+                (sel_p, sel)
             }
-        }
-        (sel_p, sel)
+        })
     })
 }
 
